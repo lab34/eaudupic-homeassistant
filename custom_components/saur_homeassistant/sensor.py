@@ -1,3 +1,4 @@
+# custom_components/water_consumption/sensor.py
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
@@ -5,6 +6,10 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import VOLUME_CUBIC_METERS
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
 from .const import DOMAIN
 
 class WaterConsumptionSensor(CoordinatorEntity, SensorEntity):
@@ -32,3 +37,8 @@ class WaterConsumptionSensor(CoordinatorEntity, SensorEntity):
             "last_period": self.coordinator.data.get("startDate") if self.coordinator.data else None,
             "current_period": self.coordinator.data.get("endDate") if self.coordinator.data else None,
         }
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
+    """Set up the Water Consumption sensor from a config entry."""
+    coordinator = hass.data[DOMAIN][entry.entry_id]
+    async_add_entities([WaterConsumptionSensor(coordinator, entry)])
