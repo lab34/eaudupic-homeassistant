@@ -1,0 +1,1 @@
+DOMAIN = "saur_homeassistant"
