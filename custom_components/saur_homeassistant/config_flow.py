@@ -1,6 +1,6 @@
 import logging
 from typing import Any, Dict, Optional
-
+from homeassistant.core import callback
 from homeassistant import config_entries
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 import voluptuous as vol
@@ -29,8 +29,6 @@ class WaterConsumptionConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 # TODO: Add validation of the credentials here
-                # For example:
-                # await validate_credentials(user_input[CONF_EMAIL], user_input[CONF_PASSWORD], self.hass)
                 return self.async_create_entry(title="Water Consumption", data=user_input)
             except ValueError:
                 errors["base"] = "invalid_auth"
@@ -38,6 +36,10 @@ class WaterConsumptionConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user", data_schema=AUTH_SCHEMA, errors=errors
         )
+
+    async def async_step_import(self, import_config):
+        """Import a config entry from configuration.yaml."""
+        return await self.async_step_user(import_config)
 
     @staticmethod
     @callback
