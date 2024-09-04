@@ -46,20 +46,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     return True
 
-async def async_setup(hass: HomeAssistant, config: dict):
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Water Consumption component."""
-    conf = config.get(DOMAIN)
     hass.data.setdefault(DOMAIN, {})
-
-    if conf is not None:
-        hass.async_create_task(
-            hass.config_entries.flow.async_init(
-                DOMAIN, context={"source": config_entries.SOURCE_IMPORT}, data=conf
-            )
-        )
-
     return True
 
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    if unload_ok := await hass.config_entries.async_unload_platforms(entry, ["sensor"]):
+        hass.data[DOMAIN].pop(entry.entry_id)
+    return unload_ok
+    
 class WaterConsumptionCoordinator(DataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, session: aiohttp.ClientSession, email: str, password: str):
         super().__init__(
@@ -81,28 +78,38 @@ class WaterConsumptionCoordinator(DataUpdateCoordinator):
         try:
             async with async_timeout.timeout(10):
                 today = datetime.now()
-                headers = {"Authorization": f"Bearer {self.access_token}"}
-                response = await self.session.get(CONSUMPTION_URL.format(
-                    self.section_id, 
-                    today.year, 
-                    today.month, 
-                    today.day
-                ), headers=headers)
-                response.raise_for_status()
-                data = await response.json()
+                data = await self._fetch_consumption_data(today)
                 
-                if "consumptions" not in data or not data["consumptions"]:
-                    raise UpdateFailed("No consumption data available")
+                # Si pas de données pour aujourd'hui, essayons hier
+                if not data:
+                    yesterday = today - timedelta(days=1)
+                    data = await self._fetch_consumption_data(yesterday)
                 
-                return data["consumptions"][0]
+                if not data:
+                    raise UpdateFailed("No consumption data available for today or yesterday")
+                
+                return data
         except asyncio.TimeoutError:
             raise UpdateFailed("Timeout error")
         except (aiohttp.ClientError, aiohttp.ServerDisconnectedError):
             raise UpdateFailed("Error communicating with API")
-        except (KeyError, IndexError) as err:
-            raise UpdateFailed(f"Unexpected data format: {err}")
         except Exception as err:
             raise UpdateFailed(f"Unexpected error: {err}")
+
+    async def _fetch_consumption_data(self, date):
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        response = await self.session.get(CONSUMPTION_URL.format(
+            self.section_id, 
+            date.year, 
+            date.month, 
+            date.day
+        ), headers=headers)
+        response.raise_for_status()
+        data = await response.json()
+        
+        if "consumptions" in data and data["consumptions"]:
+            return data["consumptions"][0]
+        return None
 
     async def _authenticate(self):
         try:
