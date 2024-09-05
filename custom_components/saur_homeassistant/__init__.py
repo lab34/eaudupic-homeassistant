@@ -10,11 +10,11 @@ import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
 
 import asyncio
-import aiohttp
-from datetime import datetime, timedelta
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.exceptions import ConfigEntryAuthFailed
+
+from homeassistant.util import dt as dt_util
+from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 
 DOMAIN = "saur_homeassistant"
 _LOGGER = logging.getLogger(__name__)
@@ -74,15 +74,16 @@ class WaterConsumptionCoordinator(DataUpdateCoordinator):
     def __init__(self, hass, email, password):
         super().__init__(
             hass,
-            logger=self.hass.logger,
+            _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(hours=1),
+            update_interval=timedelta(minutes=15),  # Mise à jour toutes les 15 minutes
         )
+        self.hass = hass
         self.email = email
         self.password = password
         self.access_token = None
         self.section_id = None
-        self.last_auth_time = None
+        self.token_expiration = None
 
     async def _async_update_data(self):
         # Refresh the token if it's expired or doesn't exist
@@ -112,19 +113,19 @@ class WaterConsumptionCoordinator(DataUpdateCoordinator):
 
     async def _fetch_consumption_data(self, date):
         headers = {"Authorization": f"Bearer {self.access_token}"}
-        async with self.hass.async_get_clientsession() as session:
-            response = await session.get(CONSUMPTION_URL.format(
-                self.section_id, 
-                date.year, 
-                date.month, 
-                date.day
-            ), headers=headers)
-            response.raise_for_status()
-            data = await response.json()
-            
-            if "consumptions" in data and data["consumptions"]:
-                return data["consumptions"][0]
-            return None
+        session = async_get_clientsession(self.hass)
+        response = await session.get(CONSUMPTION_URL.format(
+            self.section_id, 
+            date.year, 
+            date.month, 
+            date.day
+        ), headers=headers)
+        response.raise_for_status()
+        data = await response.json()
+        
+        if "consumptions" in data and data["consumptions"]:
+            return data["consumptions"][0]
+        return None
 
     async def _authenticate(self):
         try:
@@ -138,19 +139,21 @@ class WaterConsumptionCoordinator(DataUpdateCoordinator):
                     "isRecaptchaV3": True,
                     "captchaToken": True
                 }
-                async with self.hass.async_get_clientsession() as session:
-                    response = await session.post(AUTH_URL, json=payload)
-                    response.raise_for_status()
-                    data = await response.json()
-                    self.access_token = data["token"]["access_token"]
-                    self.section_id = data["defaultSectionId"]
-                    self.last_auth_time = dt_util.utcnow()
+                session = async_get_clientsession(self.hass)
+                response = await session.post(AUTH_URL, json=payload)
+                response.raise_for_status()
+                data = await response.json()
+                self.access_token = data["token"]["access_token"]
+                self.section_id = data["defaultSectionId"]
+                expires_in = int(data["token"]["expires_in"])
+                self.token_expiration = dt_util.utcnow() + timedelta(seconds=expires_in)
+                _LOGGER.info(f"Token will expire at {self.token_expiration}")
         except Exception as err:
             raise UpdateFailed(f"Authentication failed: {err}")
 
     def _is_token_expired(self):
         # Check if token is expired or doesn't exist
-        if not self.access_token or not self.last_auth_time:
+        if not self.access_token or not self.token_expiration:
             return True
-        # Assume token expires after 23 hours (to be safe)
-        return dt_util.utcnow() - self.last_auth_time > timedelta(hours=23)
+        # Check if current time is past the expiration time
+        return dt_util.utcnow() >= self.token_expiration
