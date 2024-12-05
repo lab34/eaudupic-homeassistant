@@ -10,6 +10,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from datetime import datetime
 
 from .const import DOMAIN
 
@@ -22,13 +23,15 @@ class WaterConsumptionSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{config_entry.entry_id}_water_consumption"
         self._attr_native_unit_of_measurement = UnitOfVolume.CUBIC_METERS
         self._attr_device_class = SensorDeviceClass.WATER
-        self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
 
     @property
     def native_value(self):
         """Return the state of the sensor."""
         if self.coordinator.data:
-            return self.coordinator.data.get("value")
+            value = self.coordinator.data.get("value")
+            # S'assurer que la valeur est toujours positive
+            return abs(value) if value is not None else None
         return None
 
     @property

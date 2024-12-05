@@ -7,5 +7,5 @@
   "iot_class": "cloud_polling",
   "name": "SAUR HomeAssistant",
   "requirements": [],
-  "version": "1.0.2"
+  "version": "1.0.3"
 }

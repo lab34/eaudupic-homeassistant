@@ -95,13 +95,21 @@ class WaterConsumptionCoordinator(DataUpdateCoordinator):
                 today = dt_util.now()
                 data = await self._fetch_consumption_data(today)
                 
-                # If no data for today, try yesterday
+                # Si pas de données pour aujourd'hui, essayer hier
                 if not data:
                     yesterday = today - timedelta(days=1)
                     data = await self._fetch_consumption_data(yesterday)
                 
+                # Si toujours pas de données, essayer les 7 derniers jours
                 if not data:
-                    raise UpdateFailed("No consumption data available for today or yesterday")
+                    for i in range(2, 8):  # De 2 à 7 jours en arrière
+                        past_date = today - timedelta(days=i)
+                        data = await self._fetch_consumption_data(past_date)
+                        if data:
+                            break
+                
+                if not data:
+                    raise UpdateFailed("Aucune donnée de consommation disponible sur les 7 derniers jours")
                 
                 return data
         except asyncio.TimeoutError:
