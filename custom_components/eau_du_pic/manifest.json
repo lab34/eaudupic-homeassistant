@@ -1,0 +1,11 @@
+{
+  "codeowners": ["@labouc"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/labouc/eau-du-pic-homeassistant",
+  "domain": "eau_du_pic",
+  "iot_class": "cloud_polling",
+  "name": "Eau du Pic",
+  "requirements": ["httpx"],
+  "version": "1.0.0"
+}

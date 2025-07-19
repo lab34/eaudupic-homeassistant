@@ -1,21 +1,19 @@
-# custom_components/water_consumption/sensor.py
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
     SensorDeviceClass,
 )
-#from homeassistant.const import VOLUME_CUBIC_METERS
 from homeassistant.const import UnitOfVolume
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from datetime import datetime
 
 from .const import DOMAIN
 
-class WaterConsumptionSensor(CoordinatorEntity, SensorEntity):
-    """Representation of a Water Consumption sensor."""
+
+class EauDuPicSensor(CoordinatorEntity, SensorEntity):
+    """Representation of an Eau du Pic sensor."""
 
     def __init__(self, coordinator, config_entry):
         super().__init__(coordinator)
@@ -29,20 +27,23 @@ class WaterConsumptionSensor(CoordinatorEntity, SensorEntity):
     def native_value(self):
         """Return the state of the sensor."""
         if self.coordinator.data:
-            value = self.coordinator.data.get("value")
-            # S'assurer que la valeur est toujours positive
-            return abs(value) if value is not None else None
+            return self.coordinator.data.get("value")
         return None
 
     @property
     def extra_state_attributes(self):
         """Return the state attributes of the sensor."""
-        return {
-            "last_period": self.coordinator.data.get("startDate") if self.coordinator.data else None,
-            "current_period": self.coordinator.data.get("endDate") if self.coordinator.data else None,
-        }
+        if self.coordinator.data:
+            return {
+                "last_period": self.coordinator.data.get("startDate"),
+                "current_period": self.coordinator.data.get("endDate"),
+            }
+        return {}
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
-    """Set up the Water Consumption sensor from a config entry."""
+
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+):
+    """Set up the Eau du Pic sensor from a config entry."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([WaterConsumptionSensor(coordinator, entry)])
+    async_add_entities([EauDuPicSensor(coordinator, entry)])
