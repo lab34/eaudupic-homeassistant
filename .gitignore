@@ -1,1 +1,4 @@
 login.har
+test_eaudupic_auth.py
+venv/
+__pycache__/
