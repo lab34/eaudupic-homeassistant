@@ -76,9 +76,16 @@ class EauDuPicAPI:
             raise
 
     async def async_get_contract_id(self):
-        headers = {"authorization": self.token, "api-id": API_ID}
+        headers = {
+            "authorization": self.token,
+            "api-id": API_ID,
+            "Accept": "application/vnd.api+json",
+            "Referer": "https://eaudupic.client.ccgpsl.fr/accueil",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+        }
+        params = {"include": "pconso,pconso.pdessadr"}
         try:
-            response = await self.client.get(CONTRACT_URL, headers=headers)
+            response = await self.client.get(CONTRACT_URL, headers=headers, params=params)
             response.raise_for_status()
             data = response.json()
             _LOGGER.debug("Contract ID response: %s", data)
@@ -97,21 +104,37 @@ class EauDuPicAPI:
 
     async def async_get_consumption_data(self, contract_id: str):
         url = f"{CONTRACT_URL}/{contract_id}"
-        headers = {"authorization": self.token, "api-id": API_ID}
-        response = await self.client.get(url, headers=headers)
-        response.raise_for_status()
-        data = response.json()
+        headers = {
+            "authorization": self.token,
+            "api-id": API_ID,
+            "Accept": "application/vnd.api+json",
+            "Referer": f"https://eaudupic.client.ccgpsl.fr/contrat/{contract_id}",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+        }
+        params = {"include": "proprietes,pconso,pconso.pdessadr,pconso.compteur,pconso.dernierreleve,pconso.derniermessage,pconso.proprietes,redevable_actif.personne.proprietes,telereleve"}
+        try:
+            response = await self.client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            data = response.json()
 
-        releve_info = None
-        for item in data.get("included", []):
-            if item.get("type") == "POGRC_Releve":
-                releve_info = item["attributes"]
-                break
+            releve_info = None
+            for item in data.get("included", []):
+                if item.get("type") == "POGRC_Releve":
+                    releve_info = item["attributes"]
+                    break
 
-        if releve_info:
-            return {
-                "value": releve_info.get("consorlv"),
-                "startDate": datetime.fromisoformat(releve_info.get("dateai")).strftime("%Y-%m-%d"),
-                "endDate": datetime.fromisoformat(releve_info.get("dateni")).strftime("%Y-%m-%d"),
-            }
-        return None
+            if releve_info:
+                return {
+                    "value": releve_info.get("consorlv"),
+                    "startDate": datetime.fromisoformat(releve_info.get("dateai")).strftime("%Y-%m-%d"),
+                    "endDate": datetime.fromisoformat(releve_info.get("dateni")).strftime("%Y-%m-%d"),
+                }
+            return None
+        except httpx.HTTPStatusError as e:
+            _LOGGER.error("Failed to get consumption data: HTTP status error: %s", e.response.status_code)
+            _LOGGER.error("Response headers: %s", e.response.headers)
+            _LOGGER.error("Response body: %s", e.response.text)
+            raise
+        except httpx.RequestError as e:
+            _LOGGER.error("Failed to get consumption data: Request error: %s", e)
+            raise
