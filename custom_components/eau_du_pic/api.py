@@ -8,6 +8,7 @@ from .const import (
     API_ID,
     AUTH_URL,
     CONTRACT_URL,
+    TELECONSO_URL,
 )
 
 _LOGGER = logging.getLogger(__name__)
