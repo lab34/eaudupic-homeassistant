@@ -34,10 +34,34 @@ class EauDuPicDataUpdateCoordinator(DataUpdateCoordinator):
             contract_id = await self.api.async_get_contract_id()
 
             # Fetch consumption data
-            data = await self.api.async_get_consumption_data(contract_id)
-            if not data:
-                raise UpdateFailed("No consumption data available.")
-            return data
+            # We will fetch data for the last 7 days to ensure we get the latest daily reading
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=7)
+            daily_data = await self.api.async_get_daily_consumption_data(contract_id, start_date, end_date)
+
+            if not daily_data or not daily_data.get("data"):
+                raise UpdateFailed("No daily consumption data available.")
+
+            # Find the latest daily consumption
+            latest_reading = None
+            latest_date = None
+
+            for entry in daily_data["data"]:
+                if entry["type"] == "PORLV_Teleconso":
+                    reading_date_str = entry["attributes"]["dateni"]
+                    reading_date = datetime.fromisoformat(reading_date_str.replace(" 00:00:00", ""))
+                    if latest_date is None or reading_date > latest_date:
+                        latest_date = reading_date
+                        latest_reading = entry["attributes"]["ni"]
+            
+            if latest_reading is None:
+                raise UpdateFailed("No valid daily consumption reading found.")
+
+            return {
+                "value": latest_reading,
+                "startDate": latest_date.strftime("%Y-%m-%d"),
+                "endDate": latest_date.strftime("%Y-%m-%d"),
+            }
         except Exception as err:
             raise UpdateFailed(f"Error communicating with API: {err}")
 
