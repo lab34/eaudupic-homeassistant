@@ -140,26 +140,51 @@ class EauDuPicAPI:
             _LOGGER.error("Failed to get consumption data: Request error: %s", e)
             raise
 
-    async def async_get_daily_consumption_data(self, contract_id: str, start_date: datetime, end_date: datetime):
-        url = f"{TELECONSO_URL}/{contract_id}/{start_date.strftime('%Y%m%d')}/{end_date.strftime('%Y%m%d')}"
-        headers = {
-            "authorization": self.token,
-            "api-id": API_ID,
-            "Accept": "application/vnd.api+json",
-            "Referer": "https://eaudupic.client.ccgpsl.fr/telereleves",
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-        }
-        try:
-            response = await self.client.get(url, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            _LOGGER.debug("Daily consumption data response: %s", data)
-            return data
-        except httpx.HTTPStatusError as e:
-            _LOGGER.error("Failed to get daily consumption data: HTTP status error: %s", e.response.status_code)
-            _LOGGER.error("Response headers: %s", e.response.headers)
-            _LOGGER.error("Response body: %s", e.response.text)
-            raise
-        except httpx.RequestError as e:
-            _LOGGER.error("Failed to get daily consumption data: Request error: %s", e)
-            raise
+async def async_get_daily_consumption_data(self, contract_id: str, start_date: datetime, end_date: datetime):
+    url = f"{TELECONSO_URL}/{contract_id}/{start_date.strftime('%Y%m%d')}/{end_date.strftime('%Y%m%d')}"
+    headers = {
+        "authorization": self.token,
+        "api-id": API_ID,
+        "Accept": "application/vnd.api+json",
+        "Referer": "https://eaudupic.client.ccgpsl.fr/telereleves",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    }
+
+    try:
+        response = await self.client.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        _LOGGER.debug("Daily consumption data response: %s", data)
+
+        # Filtrage ici : suppression des valeurs 0 pour aujourd'hui et hier
+        today = datetime.today().date()
+        yesterday = today - timedelta(days=1)
+
+        cleaned_data = []
+        for item in data.get("data", []):
+            attrs = item.get("attributes", {})
+            date_str = attrs.get("dateni")
+            ni = attrs.get("ni")
+
+            try:
+                date_obj = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S").date()
+            except (ValueError, TypeError):
+                continue  # Date invalide ou manquante
+
+            if ni == 0 and date_obj in [today, yesterday]:
+                _LOGGER.debug("Ignoring 0-value consumption on %s (likely incomplete)", date_obj)
+                continue
+
+            cleaned_data.append(item)
+
+        data["data"] = cleaned_data  # Remplace les données brutes par les filtrées
+        return data
+
+    except httpx.HTTPStatusError as e:
+        _LOGGER.error("Failed to get daily consumption data: HTTP status error: %s", e.response.status_code)
+        _LOGGER.error("Response headers: %s", e.response.headers)
+        _LOGGER.error("Response body: %s", e.response.text)
+        raise
+    except httpx.RequestError as e:
+        _LOGGER.error("Failed to get daily consumption data: Request error: %s", e)
+        raise
